@@ -1,0 +1,23 @@
+{
+	"folders":
+	[
+		{
+			"path": "."
+		}
+	],
+    "settings":
+    {
+        "python_interpreter": "/home/jokiel/projects/ki-schule/franz/franz_venv",
+        "python_interpreter": "/home/jokiel/projects/ki-schule/franz/franz_venv/bin/python",
+        "python_interpreter_path": "/home/jokiel/projects/ki-schule/franz/franz_venv/bin",
+        "python_package_paths": [
+                "/home/jokiel/projects/ki-schule/franz/franz_venv/lib/python3.7/site-packages"
+            ],
+        "SublimeLinter.linters.mypy.executable": "/home/jokiel/projects/ki-schule/franz/franz_venv/bin/mypy",
+        "SublimeLinter.linters.pylint.executable": "/home/jokiel/projects/ki-schule/franz/franz_venv/bin/pylint",
+        // full path and command to run black
+        "sublack.black_command": "/home/jokiel/projects/ki-schule/franz/franz_venv/bin/black",
+        // run black before saving document
+        "sublack.black_on_save": true
+    },
+}
