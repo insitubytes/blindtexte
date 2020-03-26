@@ -14,9 +14,8 @@ bt.connect()
 bt.clear_all()
 sleep(1)
 
-# for i in range(10):
-#   bt.send_random()
-#  print(i)
+# for i in range(20):
+#     bt.send_random()
 
 # for i in range(5):
 # print(i)
@@ -24,7 +23,7 @@ sleep(1)
 # bt.generate_and_save_images("test.txt", n_images=100)
 # bt.send_random
 
-start = time()
-end = start + 1 * 60  # *60:min
-while time() < end:
-    bt.generate_and_send_images(n_images=1)
+# start = time()
+# end = start + 5  # *60:min
+# while time() < end:
+bt.generate_and_send_images(n_images=1)

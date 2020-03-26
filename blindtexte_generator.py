@@ -27,8 +27,8 @@ class BlindTexteGenerator:
         self.devices = []
         self.port = None
         self._baud = 115200  # schnittstelle arduino
-        self._initial_pause = 4.0  # s
-        self._min_pause = 0.001  # pause zwischen den pixeldatenblöcken
+        self._initial_pause = 0.0  # s
+        self._min_pause = 0.000  # pause zwischen den pixeldatenblöcken
         # SIGNALING
         self._control_marker = 200
         self._clear_all = 201
@@ -39,20 +39,22 @@ class BlindTexteGenerator:
         self._n_panels = 8
         self._verbose = False  # ausgabe der übertragen daten
         # MODEL AND IMAGES
-        self.model = load_model("gans/gan10000")
+        self.model = load_model("models/gen/gan10000")
         self._noise_dim = 8
         self._thres = 0.3
         self._images = deque([], 2)  # für veränderung der bilder
-        self._send_diffs = True
+        self._send_diffs = False
         self._image_size = (128, 128)
         self._output = None
         self._diff = None
         self._shuffle = True  # pixelreihenfolge zufällig
         self._n_images = 0
         self._plot_images = True
+        self._axes = []
         self._plot_panels = True
         self._filter_images = False
         self._filter_function = ImageFilter.EDGE_ENHANCE_MORE
+        self._panel_fig = None
 
     def connect(self):
         device_dir = "/dev/"
@@ -91,7 +93,7 @@ class BlindTexteGenerator:
 
     def _get_signal(self, ix_panel, pixel_value):
         # (1-pixel_value) invertiert die bilder
-        return 211 + 20 * (1 - pixel_value) + ix_panel
+        return 210 + 20 * pixel_value + ix_panel
 
     def load_and_send_image(self, filename):
         img = Image.open(filename)
@@ -104,7 +106,7 @@ class BlindTexteGenerator:
         self._send_image()
 
     def _get_panel_index_and_col(self, col):
-        ix_panel = col // self._panel_size
+        ix_panel = col // self._panel_size + 1
         col_panel = col % self._panel_size
         return ix_panel, col_panel
 
@@ -194,9 +196,7 @@ class BlindTexteGenerator:
             for row in range(self._max_row):
                 for col in range(self._max_col):
                     ix_panel, col_panel = self._get_panel_index_and_col(col)
-                    signal = self._get_signal(
-                        ix_panel, self._images[-1][row, col_panel]
-                    )
+                    signal = self._get_signal(ix_panel, self._images[-1][row, col])
                     self._output.append((signal, row, col_panel))
         elif len(self._images) == 2:
             img1, img2 = (self._images[0], self._images[1])
@@ -206,8 +206,8 @@ class BlindTexteGenerator:
             for row, col in zip(inds[0], inds[1]):
                 if row < self._max_row and col < self._max_col:
                     ix_panel, col_panel = self._get_panel_index_and_col(col)
-                    signal = self._get_signal(ix_panel, img2[row, col_panel])
-                    self._output.append((signal, row, col_panel))
+                    signal = self._get_signal(ix_panel, img2[row, col])
+                    self._output.append((signal, self._max_row - row, col_panel))
                     self._diff.append((row, col))
         else:
             raise Exception("should never visit this place!")
@@ -218,13 +218,38 @@ class BlindTexteGenerator:
         fig = pl.figure(0)
         fig.clear()
         ax = fig.add_subplot(111)
-        ax.imshow(self._images[-1], interpolation=None, cmap="gray")
+        ax.imshow(self._images[-1], interpolation=None, cmap="gray", origin="lower")
         diff = np.array(self._diff)
         img = np.zeros((self._max_row, self._max_col, 4))
         # img[diff[:, 0], diff[:, 1]] = (128, 255, 0, 250)  # zeigt die unterschiede
-        ax.imshow(img, alpha=0.7, interpolation=None)
+        ax.imshow(img, alpha=0.7, interpolation=None, origin="lower")
         pl.pause(0.1)
         pl.show()
 
     def _plot_on_panels(self, values):
-        signale, row, col = values
+        if self._panel_fig is None:
+            self._panel_fig = pl.figure(1)
+        if values[0] == self._clear_all:
+            self._panel_fig.clear()
+            self._axes = []
+            for p in range(self._n_panels):
+                new_ax = self._panel_fig.add_subplot(1, self._n_panels, p + 1)
+                self._axes.append(new_ax)
+                # self._axes[-1].set_xticklabels([])
+                # self._axes[-1].set_yticklabels([])
+                self._axes[-1].set_xlim([0, self._max_col // self._n_panels])
+                self._axes[-1].set_ylim([0, self._max_row])
+                self._axes[-1].set_title("panel " + str(p + 1))
+            return
+        if values[0] == self._set_all:
+            return
+        if len(values) == 3:
+            signal, row, col = values
+            ix_panel = int(str(signal)[-1])  # läuft nur bis 9
+            pixel_on = (signal - 200 - ix_panel) == 10
+            if pixel_on:
+                self._axes[ix_panel - 1].plot(col, row, ".", color=(0, 0, 0))
+            else:
+                self._axes[ix_panel - 1].plot(col, row, ".", color=(1, 0.4, 0.7))
+            # self._axes[-1].set_xlim([0, self._max_col // self._n_panels])
+            # self._axes[-1].set_ylim([0, self._max_row])
