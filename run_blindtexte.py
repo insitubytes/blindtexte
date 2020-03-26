@@ -9,18 +9,22 @@ reload(btg)
 
 
 bt = btg.BlindTexteGenerator()
-# bt.connect()
-# bt.clear_all()
+bt.connect()
+# bt.set_all()
+bt.clear_all()
+sleep(1)
 
-# for i in range(1000):
-#     bt.send_random()
-#     print(i)
-
-# bt.generate_and_send_images(n_images=9)
 # for i in range(10):
-#     bt.generate_and_save_images("test.txt", n_images=1)
+#   bt.send_random()
+#  print(i)
 
+# for i in range(5):
+# print(i)
+# bt.generate_and_send_images(n_images=1)
+# bt.generate_and_save_images("test.txt", n_images=100)
+# bt.send_random
 
-# ein_01 = "15"
-# aus_01 = "16"
-# now = time.strftime("%H:%M")
+start = time()
+end = start + 1 * 60  # *60:min
+while time() < end:
+    bt.generate_and_send_images(n_images=1)

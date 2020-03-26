@@ -15,7 +15,6 @@ import numpy as np
 import random
 import time
 from time import sleep
-import random
 import os
 from collections import deque
 from PIL import ImageFilter, Image
@@ -27,9 +26,9 @@ class BlindTexteGenerator:
         self.status = 0  # 0: no connection
         self.devices = []
         self.port = None
-        self._baud = 115200  # 112500 bit pro sekunde
-        self._initial_pause = 0.0  # s
-        self._min_pause = 0.00  # 24  # s
+        self._baud = 115200  # schnittstelle arduino
+        self._initial_pause = 4.0  # s
+        self._min_pause = 0.001  # pause zwischen den pixeldatenblöcken
         # SIGNALING
         self._control_marker = 200
         self._clear_all = 201
@@ -37,19 +36,21 @@ class BlindTexteGenerator:
         self._max_col = 128
         self._max_row = 128
         self._panel_size = 16
-        self._n_panels = 4
-        self._verbose = False
+        self._n_panels = 8
+        self._verbose = False  # ausgabe der übertragen daten
         # MODEL AND IMAGES
-        self.model = load_model("blintextgan")
+        self.model = load_model("gans/gan10000")
         self._noise_dim = 8
         self._thres = 0.3
-        self._images = deque([], 2)
+        self._images = deque([], 2)  # für veränderung der bilder
+        self._send_diffs = True
         self._image_size = (128, 128)
         self._output = None
         self._diff = None
-        self._shuffle = False
+        self._shuffle = True  # pixelreihenfolge zufällig
         self._n_images = 0
-        self._plot = True
+        self._plot_images = True
+        self._plot_panels = True
         self._filter_images = False
         self._filter_function = ImageFilter.EDGE_ENHANCE_MORE
 
@@ -83,17 +84,14 @@ class BlindTexteGenerator:
         # if not self.port.is_open:
         #     self.port.open()
         self.port.write(bytearray(values))
+        if self._plot_panels:
+            self._plot_on_panels(values)
         # self.port.close()
         sleep(self._min_pause)
 
     def _get_signal(self, ix_panel, pixel_value):
-        return 210 + 20 * pixel_value + ix_panel
-
-    def _get_panel_index_and_col(self, col):
-        swapped_col = self._max_col - col - 1  # i.e. range [0, max_col]
-        ix_panel = swapped_col // self._panel_size
-        col_panel = swapped_col % self._panel_size
-        return ix_panel, col_panel
+        # (1-pixel_value) invertiert die bilder
+        return 211 + 20 * (1 - pixel_value) + ix_panel
 
     def load_and_send_image(self, filename):
         img = Image.open(filename)
@@ -101,9 +99,14 @@ class BlindTexteGenerator:
         img = img.resize((self._max_row, self._max_col))
         self._images.append(np.array(img))
         self._determine_output()
-        if self._plot:
+        if self._plot_images:
             self._plot_output()
         self._send_image()
+
+    def _get_panel_index_and_col(self, col):
+        ix_panel = col // self._panel_size
+        col_panel = col % self._panel_size
+        return ix_panel, col_panel
 
     def send_random(self, options=[10, 30]):
         row = np.random.randint(0, self._max_row) + 1
@@ -114,9 +117,6 @@ class BlindTexteGenerator:
         self._send([signal, row, col_panel])
 
     def generate_and_send_images(self, n_images=None):
-        if self._plot:
-            if n_images is None or n_images > 10:
-                n_images = 50
         self._n_images = 0  # need to reset incase this is called multiple times
         while n_images is None or self._n_images < n_images:
             print("creating image", self._n_images)
@@ -126,13 +126,6 @@ class BlindTexteGenerator:
             self._n_images += 1
 
     def generate_and_save_images(self, filename, n_images=None):
-        if self._plot:
-            if n_images is None or n_images > 10:
-                print("Warning: Only saving 10 images instead of", n_images)
-                # n_images = 10
-        elif n_images is None or n_images > 1000:
-            print("Warning: Only saving 1000 images instead of", n_images)
-            # n_images = 1000
         self._n_images = 0  # need to reset incase this is called multiple times
         with open(filename, "wt") as file:
             while n_images is None or self._n_images < n_images:
@@ -145,12 +138,10 @@ class BlindTexteGenerator:
     def _send_image(self):
         if self._output is None:
             return
-        if self._shuffle:
-            random.shuffle(self._output)
         t = len(self._output)
         for i, value in enumerate(self._output):
             self._send(value)
-            n_dash = int((i / t * 100) // 10)
+            n_dash = int((i / t * 100) // 10)  # ausgabe
             n_none = 9 - n_dash
             print(
                 "\rsending", t, "pixels [" + "-" * n_dash + " " * n_none + "]", end=""
@@ -160,8 +151,6 @@ class BlindTexteGenerator:
     def _save_image(self, file):
         if self._output is None:
             return
-        if self._shuffle:
-            random.shuffle(self._output)
         t = len(self._output)
         for i, value in enumerate(self._output):
             for v in value:
@@ -189,7 +178,7 @@ class BlindTexteGenerator:
             image = self._filter(image)
         self._images.append((image > self._thres).astype("int"))
         self._determine_output()
-        if self._plot:
+        if self._plot_images:
             self._plot_output()
 
     def _filter(self, image):
@@ -198,16 +187,17 @@ class BlindTexteGenerator:
         return f_img
 
     def _determine_output(self):
-        if len(self._images) == 1:
+        if not self._send_diffs or len(self._images) == 1:
             self._output = []
             self._diff = []
             # the complete first image needs to be plotted
             for row in range(self._max_row):
                 for col in range(self._max_col):
                     ix_panel, col_panel = self._get_panel_index_and_col(col)
-                    signal = self._get_signal(ix_panel, self._images[0][row, col_panel])
+                    signal = self._get_signal(
+                        ix_panel, self._images[-1][row, col_panel]
+                    )
                     self._output.append((signal, row, col_panel))
-                    self._diff.append((row, col))
         elif len(self._images) == 2:
             img1, img2 = (self._images[0], self._images[1])
             inds = np.where(img1 != img2)
@@ -219,6 +209,10 @@ class BlindTexteGenerator:
                     signal = self._get_signal(ix_panel, img2[row, col_panel])
                     self._output.append((signal, row, col_panel))
                     self._diff.append((row, col))
+        else:
+            raise Exception("should never visit this place!")
+        if self._shuffle:
+            random.shuffle(self._output)
 
     def _plot_output(self):  # anzeige portraits auf notebookbildschirm
         fig = pl.figure(0)
@@ -231,3 +225,6 @@ class BlindTexteGenerator:
         ax.imshow(img, alpha=0.7, interpolation=None)
         pl.pause(0.1)
         pl.show()
+
+    def _plot_on_panels(self, values):
+        signale, row, col = values
