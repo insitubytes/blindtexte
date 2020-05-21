@@ -17,7 +17,7 @@ import time
 from time import sleep
 import os
 from collections import deque
-from PIL import ImageFilter, Image
+from PIL import ImageFilter, Image, ImageOps
 
 
 class BlindTexteGenerator:
@@ -49,7 +49,12 @@ class BlindTexteGenerator:
         self._diff = None
         self._shuffle = True  # pixelreihenfolge zufällig
         self._n_images = 0
+        self._n_generated_images = 0
         self._plot_images = True
+        self._save_images = True
+        self._horizontal_flip_saved_images = True
+        self._image_path = "images/"
+        self._image_format = ".jpg"
         self._axes = []
         self._plot_panels = True
         self._filter_images = False
@@ -126,15 +131,16 @@ class BlindTexteGenerator:
             print("sending image", self._n_images)
             self._send_image()
             self._n_images += 1
+            self._n_generated_images += 1
 
-    def generate_and_save_images(self, filename, n_images=None):
+    def generate_and_save_images_as_text(self, filename, n_images=None):
         self._n_images = 0  # need to reset incase this is called multiple times
         with open(filename, "wt") as file:
             while n_images is None or self._n_images < n_images:
                 # print("creating image", self._n_images)
                 self._generate_new_image()
                 # print("sending image", self._n_images)
-                self._save_image(file)
+                self._save_image_as_txt(file)
                 self._n_images += 1
 
     def _send_image(self):
@@ -150,7 +156,7 @@ class BlindTexteGenerator:
             )
         print("\n")
 
-    def _save_image(self, file):
+    def _save_image_as_txt(self, file):
         if self._output is None:
             return
         t = len(self._output)
@@ -170,6 +176,20 @@ class BlindTexteGenerator:
         file.write("\n")
         sleep(self._min_pause)
 
+    def _save_image(self):
+        # determine filename
+        timestr = time.strftime("%Y%m%d-%H%M%S")
+        filename = timestr + "-" + str(self._n_generated_images)
+        img = Image.fromarray((255 * self._images[-1]).astype("float")).convert("RGB")
+        print("saving image to", self._image_path + filename + self._image_format)
+        if not os.path.isdir(self._image_path):
+            if os.path.isfile(self._image_path):
+                raise Exception("Warning: image path is a file")
+            os.mkdir(self._image_path)
+        if self._horizontal_flip_saved_images:
+            img = ImageOps.flip(img)
+        img.save(self._image_path + filename + self._image_format)
+
     def _generate_new_image(self):
         # zufälliger Code!
         random_code = np.random.randn(1, self._noise_dim)
@@ -182,6 +202,8 @@ class BlindTexteGenerator:
         self._determine_output()
         if self._plot_images:
             self._plot_output()
+        if self._save_images:
+            self._save_image()
 
     def _filter(self, image):
         img = Image.fromarray((image * 255).astype(np.uint8))
