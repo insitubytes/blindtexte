@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 # version: 0.4 2020.03.05 23:54
+import gc
 import serial
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -132,6 +133,7 @@ class BlindTexteGenerator:
             self._send_image()
             self._n_images += 1
             self._n_generated_images += 1
+            gc.collect()
 
     def generate_and_save_images_as_text(self, filename, n_images=None):
         self._n_images = 0  # need to reset incase this is called multiple times
