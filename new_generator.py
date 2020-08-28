@@ -27,7 +27,10 @@ class NewGenerator:
         self._initial_pause = 0.0  # s
         self._min_pause = 0.000  # pause zwischen den pixeldatenblöcken
         # MODEL AND IMAGES
-        self.model = load_model("models/gen/gan10000")
+        self._model = None
+        self._model_name = None
+        # self._model_path = "models/gen/"
+        self._model_path = "/home/jokiel/gdrive_insitubytes/link/gen/"
         self._noise_dim = 8
         self._thres = 0.3
         self._images = deque([], 2)  # für veränderung der bilder
@@ -47,7 +50,25 @@ class NewGenerator:
         self._filter_function = ImageFilter.EDGE_ENHANCE_MORE
         self._panel_fig = None
 
+    def load_most_recent_model(self):
+        print("loading most recent model...")
+        all_models = next(os.walk(self._model_path))[1]
+        if len(all_models) == 0:
+            print("\r no model available")
+            return
+        if self._model_name is None or self._model_name is not all_models[-1]:
+            try:
+                self._model = load_model(self._model_path + all_models[-1])
+            except:
+                print("\r could not load model", all_models[-1])
+            else:
+                print("\r successfully loaded model", all_models[-1])
+                self._model_name = all_models[-1]
+
     def generate_new_image(self):
+        if self._model is None:
+            print("no model loaded")
+            return None
         print("creating image", self._n_images)
         self._generate_new_image()
         print("saving image", self._n_images)
@@ -59,7 +80,7 @@ class NewGenerator:
         # zufälliger Code!
         random_code = np.random.randn(1, self._noise_dim)
         # hochskalieren
-        tf_image = tf.image.resize(self.model.predict(random_code), self._image_size)
+        tf_image = tf.image.resize(self._model.predict(random_code), self._image_size)
         image = tf_image.numpy().squeeze()
         if self._filter_images:
             image = self._filter(image)
@@ -97,12 +118,15 @@ class NewGenerator:
         pl.pause(0.1)
         pl.show()
 
-    def save_image(self):
+    def save_image(self, filename):
+        if self._model is None:
+            print("no model loaded")
+            return None
         # determine filename
-        timestr = time.strftime("%Y%m%d-%H%M%S")
-        filename = timestr + "-" + str(self._n_generated_images)
-        filename = "always_the_same"
-        img = Image.fromarray((255 * self._images[-1]).astype("float")).convert("RGB")
+        # timestr = time.strftime("%Y%m%d-%H%M%S")
+        # filename = timestr + "-" + str(self._n_generated_images)
+        # filename = "always_the_same"
+        img = Image.fromarray((255 * self._images[-1]).astype("uint8")).convert("RGB")
         print("saving image to", self._image_path + filename + self._image_format)
         if not os.path.isdir(self._image_path):
             if os.path.isfile(self._image_path):
